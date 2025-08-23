@@ -1,10 +1,10 @@
+<!-- client/trangchu.html -->
 <!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ứng Dụng Hội Nghị</title>
-  <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body {
@@ -48,25 +48,20 @@
   </style>
 </head>
 <body>
-  <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-light shadow-sm">
     <div class="container-fluid">
       <h1 class="navbar-brand">📹 Hội Nghị Trực Tuyến</h1>
     </div>
   </nav>
-
-  <!-- Main container -->
   <div class="container text-center">
     <h2 class="header-title">Xin chào <span id="userName">Người Dùng</span> 👋</h2>
     <div class="user-info">
       <p>Email: <span id="userEmail">example@example.com</span></p>
       <p>📱 Số điện thoại: <span id="userPhone">+84 912 345 678</span></p>
     </div>
-
     <div class="row justify-content-center mt-4">
-      <!-- Start Meeting -->
       <div class="col-md-4">
-        <a href="room.html" style="text-decoration: none; color: inherit;">
+        <a href="video.html" style="text-decoration: none; color: inherit;">
           <div class="card card-custom p-4 shadow-sm">
             <div class="icon">🕒</div>
             <h4 class="mt-3">Bắt Đầu</h4>
@@ -74,8 +69,6 @@
           </div>
         </a>
       </div>
-
-      <!-- Schedule Meeting -->
       <div class="col-md-4">
         <div class="card card-custom p-4 shadow-sm">
           <div class="icon">📅</div>
@@ -84,8 +77,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Dial-in info -->
     <div class="row mt-4">
       <div class="col-md-8 offset-md-2">
         <div class="card p-3 shadow-sm">
@@ -95,25 +86,18 @@
       </div>
     </div>
   </div>
-
-  <!-- Footer -->
   <footer>
     © 2025 Ứng Dụng Hội Nghị | Phát triển bởi Nhóm của bạn 🚀
   </footer>
-
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Script load thông tin user -->
+  <script src="/socket.io/socket.io.js"></script>
+    <script src="./src/js/auth.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const username = localStorage.getItem("username");
       const email = localStorage.getItem("email");
-      const phone = localStorage.getItem("phone");
-
       if (username) document.getElementById("userName").innerText = username;
       if (email) document.getElementById("userEmail").innerText = email;
-      if (phone) document.getElementById("userPhone").innerText = phone;
     });
   </script>
 </body>
