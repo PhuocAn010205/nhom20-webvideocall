@@ -1,4 +1,3 @@
-// client/js/auth.js
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🔧 auth.js loaded');
 
@@ -18,21 +17,26 @@ document.addEventListener('DOMContentLoaded', () => {
       let username = inpUserName.value.trim();
       let email = inpEmail.value.trim();
       let password = inpPwd.value.trim();
-      let configPassword = inpConfirmPwd.value.trim();
+      let confirmPassword = inpConfirmPwd.value.trim();
 
-      if (!username || !email || !password || !configPassword) {
+      if (!username || !email || !password || !confirmPassword) {
         regMessage.innerText = "Điền vào các ô còn trống.";
         regMessage.style.color = "red";
         console.log('❌ Thiếu dữ liệu');
         return;
       }
+      if (password !== confirmPassword) {
+        regMessage.innerText = "Mật khẩu không khớp.";
+        regMessage.style.color = "red";
+        return;
+      }
 
       try {
         console.log('📤 Gửi fetch /register');
-        const res = await fetch("http://localhost:3000/register", {
+        const res = await fetch("https://4bd04ed128f6.ngrok-free.app/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, email }),
+          body: JSON.stringify({ username, email, password }),
         });
         const data = await res.json();
         regMessage.innerText = data.message;
@@ -42,12 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           setTimeout(() => {
             window.location.href = "dangnhap.html";
-          }, 1500);
+          }, 500);
         }
-      } catch (err) {
-        regMessage.innerText = "Lỗi kết nối server!";
+      } catch (error) {
+        console.error("❌ Lỗi đăng ký:", error);
+        regMessage.innerText = `Có lỗi xảy ra: ${error.message || 'Vui lòng thử lại.'}`;
         regMessage.style.color = "red";
-        console.error('❌ Fetch error:', err);
       }
     });
   }
@@ -75,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         console.log('📤 Gửi fetch /login');
-        const res = await fetch("http://localhost:3000/login", {
+        const res = await fetch("https://4bd04ed128f6.ngrok-free.app/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
@@ -91,13 +95,25 @@ document.addEventListener('DOMContentLoaded', () => {
           localStorage.setItem("email", data.user.email);
           setTimeout(() => {
             window.location.href = "trangchu.html";
-          }, 1500);
+          }, 500);
         }
-      } catch (err) {
-        loginMessage.innerText = "Lỗi kết nối server!";
+      } catch (error) {
+        console.error("❌ Lỗi đăng nhập:", error);
+        loginMessage.innerText = `Có lỗi xảy ra: ${error.message || 'Vui lòng thử lại.'}`;
         loginMessage.style.color = "red";
-        console.error('❌ Fetch error:', err);
       }
+    });
+  }
+
+  // Nút đăng xuất
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      console.log('👋 Đăng xuất');
+      localStorage.removeItem("username");
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("email");
+      window.location.href = "dangnhap.html";
     });
   }
 });

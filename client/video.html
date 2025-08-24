@@ -1,256 +1,577 @@
-<!-- client/video.html -->
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cuộc Gọi Hội Nghị</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="/socket.io/socket.io.js"></script>
+  <title>Phòng Video Call</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">
+  <script src="https://kit.fontawesome.com/a076d05399.js"></script>
   <style>
-    body { background-color: #f5f6fa; }
-    .video-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 15px; padding: 20px;
+    #videoContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
     }
-    .video-card {
-      background: #000; border-radius: 10px;
-      position: relative; height: 200px; color: white;
-      display: flex; justify-content: center; align-items: center;
+    video {
+      border: 1px solid #ccc;
+      max-width: 100%;
     }
-    .video-card video {
-      width: 100%; height: 100%; border-radius: 10px; object-fit: cover;
+    .main-video {
+      width: 60% !important;
+      height: auto;
     }
-    .video-card .name {
-      position: absolute; bottom: 5px; right: 10px;
-      background: rgba(0,0,0,0.6);
-      padding: 2px 8px; border-radius: 5px; font-size: 14px;
+    .small-video {
+      width: 30% !important;
+      height: auto;
     }
-    .controls { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
-    .controls button { border-radius: 50%; width: 50px; height: 50px; font-size: 20px; }
-    .chat-box { background: #fff; border-radius: 10px; height: 100%;
-      display: flex; flex-direction: column; border: 1px solid #ddd; }
-    .chat-messages { flex: 1; padding: 10px; overflow-y: auto; }
-    .chat-messages p { margin: 0 0 5px; }
-    .chat-input { display: flex; border-top: 1px solid #ddd; }
-    .chat-input input { flex: 1; border: none; padding: 10px; outline: none; }
-    .chat-input button { border: none; background: #4e73df; color: white; padding: 10px 15px; }
-    #create-room-btn { margin: 10px 0; }
   </style>
 </head>
 <body>
-<div class="container-fluid">
-  <div class="row">
-    <!-- Video Grid -->
-    <div class="col-md-8">
-      <h3 class="text-center">Phòng: <span id="roomIdDisplay"></span></h3>
-      <button id="create-room-btn" class="btn btn-success">Tạo Phòng Mới</button>
-      <div class="video-grid" id="video-grid"></div>
-      <div class="controls">
-        <button class="btn btn-light" id="btn-mic">🎤</button>
-        <button class="btn btn-light" id="btn-camera">📷</button>
-        <button class="btn btn-light" id="btn-screen">⛶</button>
-        <button class="btn btn-danger" id="btn-leave">⏹</button>
+  <div class="container py-4">
+    <h1 class="text-center">Phòng: <span id="roomIdDisplay"></span></h1>
+    <input id="roomIdCopy" class="form-control mb-2" readonly>
+    <button onclick="copyRoomId()" class="btn btn-secondary">Copy</button>
+    <div id="videoContainer" class="mt-3"></div>
+    <div class="main_controls mt-3">
+      <div class="main_controls_block">
+        <div onclick="muteUnmute()" class="main_controls_button main_mute_button">
+          <i class="fas fa-microphone"></i>
+          <span>Mute</span>
+        </div>
+        <div onclick="playStop()" class="main_controls_button main_video_button">
+          <i class="fas fa-video"></i>
+          <span>Stop Video</span>
+        </div>
+        <div onclick="shareScreen()" class="main_controls_button main_screen_button">
+          <i class="fas fa-desktop"></i>
+          <span>Share Screen</span>
+        </div>
+      </div>
+      <div class="main_controls_block">
+        <button id="leaveBtn" class="btn btn-danger">Leave Meeting</button>
+        <button id="backBtn" class="btn btn-secondary">Quay Về</button>
       </div>
     </div>
-
-    <!-- Chat -->
-    <div class="col-md-4">
-      <div class="chat-box">
-        <div class="chat-messages" id="chat-messages"></div>
-        <div class="chat-input">
-          <input type="text" id="chat-input" placeholder="Nhập tin nhắn...">
-          <button id="send-btn">Gửi</button>
-        </div>
+    <div id="chatContainer" class="mt-3">
+      <div id="chatMessages" class="border p-2" style="height: 200px; overflow-y: auto;"></div>
+      <div class="input-group mt-2">
+        <input id="chatInput" class="form-control" placeholder="Nhập tin nhắn">
+        <button id="sendBtn" class="btn btn-primary">Gửi</button>
       </div>
     </div>
   </div>
-</div>
-
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Logic JS -->
-<script>
-  const socket = io('http://localhost:3000');
-  const urlParams = new URLSearchParams(window.location.search);
-  let roomId = urlParams.get("roomId");
-  document.getElementById('roomIdDisplay').textContent = roomId || 'Chưa tạo phòng';
-
-  const userId = localStorage.getItem('user_id') || Math.floor(Math.random() * 10000);
-  const username = localStorage.getItem('username') || `User${userId}`;
-  const videoGrid = document.getElementById("video-grid");
-  const chatMessages = document.getElementById("chat-messages");
-  const chatInput = document.getElementById("chat-input");
-  const sendBtn = document.getElementById("send-btn");
-  const btnMic = document.getElementById("btn-mic");
-  const btnCamera = document.getElementById("btn-camera");
-  const btnScreen = document.getElementById("btn-screen");
-  const btnLeave = document.getElementById("btn-leave");
-  const createRoomBtn = document.getElementById("create-room-btn");
-
-  let localStream;
-  let peerConnections = {};
-
-  // Get media
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-      localStream = stream;
-      addVideoStream(stream, username);
-
-      if (roomId) {
-        socket.emit("join-room", { roomId, userId, username });
-      }
-    })
-    .catch(err => console.error('❌ Lỗi getUserMedia:', err));
-
-  // Thêm video
-  function addVideoStream(stream, name) {
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.autoplay = true;
-    video.playsInline = true;
-    const wrapper = document.createElement("div");
-    wrapper.classList.add("video-card");
-    const nameTag = document.createElement("div");
-    nameTag.classList.add("name");
-    nameTag.innerText = name;
-    wrapper.appendChild(video);
-    wrapper.appendChild(nameTag);
-    videoGrid.appendChild(wrapper);
-  }
-
-  // Tạo phòng mới
-  createRoomBtn.addEventListener('click', () => {
-    roomId = uuidv4();
-    document.getElementById('roomIdDisplay').textContent = roomId;
-    socket.emit("create-room", { creatorId: userId, username });
-    socket.emit("join-room", { roomId, userId, username });
-  });
-
-  // Khi user mới join
-  socket.on("user-joined", ({ userId: otherId, username: otherName }) => {
-    console.log('📡 User joined:', otherName);
-    createOffer(otherId, otherName);
-    notify(`🔔 ${otherName} đã tham gia`);
-  });
-
-  // Rời phòng
-  socket.on("user-left", ({ username: leftName }) => {
-    notify(`❌ ${leftName} đã rời phòng`);
-  });
-
-  // Nhận offer
-  socket.on("offer", async ({ from, sdp }) => {
-    console.log('📡 Nhận offer từ:', from);
-    const pc = createPeerConnection(from);
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("answer", { roomId, to: from, sdp: answer });
-  });
-
-  // Nhận answer
-  socket.on("answer", async ({ from, sdp }) => {
-    console.log('📡 Nhận answer từ:', from);
-    const pc = peerConnections[from];
-    if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  });
-
-  // Nhận ICE
-  socket.on("ice-candidate", ({ from, candidate }) => {
-    console.log('📡 Nhận ICE từ:', from);
-    const pc = peerConnections[from];
-    if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
-  });
-
-  // ========== WebRTC functions ==========
-  function createPeerConnection(otherId, otherName) {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  <script src="https://4bd04ed128f6.ngrok-free.app/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io('https://4bd04ed128f6.ngrok-free.app/', {
+      forceNew: true,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      timeout: 30000
     });
-    peerConnections[otherId] = pc;
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.ontrack = (event) => {
-      addVideoStream(event.streams[0], otherName || `Người dùng ${otherId}`);
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", { roomId, to: otherId, candidate: event.candidate });
-      }
-    };
-
-    return pc;
-  }
-
-  async function createOffer(otherId, otherName) {
-    const pc = createPeerConnection(otherId, otherName);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("offer", { roomId, to: otherId, sdp: offer });
-  }
-
-  // ========== Chat ==========
-  sendBtn.addEventListener("click", () => {
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    socket.emit("chat-message", {
-      roomId,
-      senderId: userId,
-      senderName: username,
-      receiverId: null,
-      message: msg
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
     });
-    chatInput.value = "";
-  });
 
-  socket.on("chat-message", (data) => {
-    const p = document.createElement("p");
-    p.innerHTML = `<b>${data.senderName}:</b> ${data.message}`;
-    chatMessages.appendChild(p);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  });
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error.message);
+    });
 
-  function notify(msg) {
-    const p = document.createElement("p");
-    p.innerHTML = `<i>${msg}</i>`;
-    chatMessages.appendChild(p);
-  }
+    socket.on('reconnect', (attempt) => {
+      console.log('Socket reconnected, attempt:', attempt);
+      socket.emit('join-room', roomId, userId, username);
+    });
 
-  // ========== Controls ==========
-  btnMic.addEventListener("click", () => {
-    localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
-    btnMic.classList.toggle("btn-success", localStream.getAudioTracks()[0].enabled);
-    btnMic.classList.toggle("btn-danger", !localStream.getAudioTracks()[0].enabled);
-  });
+    const pathParts = window.location.pathname.split('/');
+    const roomId = pathParts.length > 1 ? pathParts[1] : null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('userId') || localStorage.getItem('user_id') || Math.random().toString(36).substr(2, 9);
+    const username = localStorage.getItem('username') || 'Anonymous';
 
-  btnCamera.addEventListener("click", () => {
-    localStream.getVideoTracks()[0].enabled = !localStream.getVideoTracks()[0].enabled;
-    btnCamera.classList.toggle("btn-success", localStream.getVideoTracks()[0].enabled);
-    btnCamera.classList.toggle("btn-danger", !localStream.getVideoTracks()[0].enabled);
-  });
+    console.log('Parsed URL - roomId:', roomId, 'userId:', userId, 'username:', username);
 
-  btnScreen.addEventListener("click", () => {
-    navigator.mediaDevices.getDisplayMedia()
-      .then(screenStream => {
-        localStream.getVideoTracks()[0].enabled = false;
-        screenStream.getVideoTracks()[0].onended = () => {
-          localStream.getVideoTracks()[0].enabled = true;
+    if (!roomId || !/^\d{8}$/.test(roomId)) {
+      console.error('No or invalid roomId provided:', roomId);
+      alert('Mã phòng không hợp lệ hoặc không tìm thấy. Vui lòng thử lại.');
+      window.location.href = '/home';
+      throw new Error('Missing or invalid roomId');
+    }
+
+    const roomIdDisplay = document.getElementById('roomIdDisplay');
+    const roomIdCopy = document.getElementById('roomIdCopy');
+    const videoContainer = document.getElementById('videoContainer');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+    const backBtn = document.getElementById('backBtn');
+
+    let localStream;
+    let screenStream;
+    let peers = {};
+    let mainVideoUserId = null;
+
+    // Hàm getIceServers
+    async function getIceServers() {
+      const username = 'an12';
+      const credential = '23a5cf68-80c8-11f0-83f4-0242ac130003';
+      const auth = Buffer.from(`${username}:${credential}`).toString('base64');
+      return new Promise((resolve, reject) => {
+        const https = require('https');
+        const options = {
+          host: 'global.xirsys.net',
+          path: '/_turn/MyFirstApp',
+          method: 'PUT',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json',
+            'Content-Length': JSON.stringify({ format: 'urls' }).length
+          }
         };
-        localStream.addTrack(screenStream.getVideoTracks()[0]);
-        addVideoStream(localStream, `${username} (Screen)`);
-      })
-      .catch(err => console.error('❌ Lỗi chia sẻ màn hình:', err));
-  });
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => {
+            try {
+              const iceServers = JSON.parse(data).v.iceServers;
+              if (!iceServers || iceServers.length === 0) {
+                console.warn('No TURN servers from Xirsys, falling back to STUN + TURN');
+                resolve([
+                  { urls: 'stun:stun.l.google.com:19302' },
+                  { urls: 'stun:stun1.l.google.com:19302' },
+                  { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' }
+                ]);
+              } else {
+                console.log('Retrieved ICE servers from Xirsys:', iceServers);
+                resolve(iceServers);
+              }
+            } catch (e) {
+              console.error('Error parsing ICE servers:', e);
+              resolve([
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' }
+              ]);
+            }
+          });
+        });
+        req.on('error', (e) => {
+          console.error('Error requesting ICE servers:', e);
+          resolve([
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' }
+          ]);
+        });
+        req.write(JSON.stringify({ format: 'urls' }));
+        req.end();
+      });
+    }
 
-  btnLeave.addEventListener("click", () => {
-    socket.emit("leave-room", { roomId, userId, username });
-    window.location.href = "trangchu.html";
-  });
-</script>
+    // Hàm createPeerConnection
+    async function createPeerConnection(userId, toSocketId, stream) {
+      const iceServers = await getIceServers();
+      console.log('Using ICE servers:', iceServers);
+      const pc = new RTCPeerConnection({ iceServers });
+      stream.getTracks().forEach(track => {
+        console.log(`Adding track ${track.kind} to peer ${userId}`);
+        pc.addTrack(track, stream);
+      });
+      console.log(`Added tracks for peer ${userId}:`, { video: stream.getVideoTracks().length, audio: stream.getAudioTracks().length });
+
+      pc.ontrack = (event) => {
+        console.log(`Received track from ${userId}, stream count: ${event.streams.length}, track kinds:`, event.track.kind);
+        if (event.streams.length > 0) {
+          let video = videoContainer.querySelector(`video[data-user-id="${userId}"]`);
+          if (!video) {
+            video = document.createElement('video');
+            video.setAttribute('data-user-id', userId);
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = (userId === this.userId); // Mute local video to avoid echo
+            video.style.width = userId === this.userId ? '300px' : '200px';
+            video.style.height = userId === this.userId ? '200px' : '150px';
+            videoContainer.appendChild(video);
+            console.log(`Added new video element for user ${userId}`);
+          }
+          video.srcObject = event.streams[0];
+          video.onloadedmetadata = () => {
+            video.play().catch(e => console.error(`Play error for user ${userId}:`, e));
+            console.log(`Remote video stream started for user ${userId}, playing: ${video.played.length > 0}`);
+            if (userId !== this.userId) updateMainVideo(video, userId); // Ưu tiên video remote
+          };
+        } else {
+          console.warn(`No streams received from ${userId}`);
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`ICE connection state for peer ${userId}: ${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          console.error(`ICE connection lost for peer ${userId}, attempting reconnect...`);
+          setTimeout(() => {
+            if (peers[userId]) {
+              peers[userId].peer.close();
+              delete peers[userId];
+              connectToNewUser(userId, toSocketId);
+            }
+          }, 2000); // Thử lại sau 2 giây
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log(`Sending ICE candidate to ${userId}:`, event.candidate.candidate.substring(0, 50) + '...');
+          socket.emit('candidate', { roomId, candidate: event.candidate, toSocketId });
+        }
+      };
+
+      return pc;
+    }
+
+    async function init() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const localVideo = document.createElement('video');
+        localVideo.srcObject = localStream;
+        localVideo.autoplay = true;
+        localVideo.playsInline = true;
+        localVideo.muted = true; // Mute local video to avoid echo
+        localVideo.addEventListener('loadedmetadata', () => {
+          localVideo.play().catch(e => console.error('Local video play error:', e));
+          console.log('Local video stream started, playing: ', localVideo.played.length > 0);
+          updateMainVideo(localVideo, userId);
+        });
+        localVideo.style.width = '300px';
+        localVideo.style.height = '200px';
+        localVideo.setAttribute('data-user-id', userId);
+        videoContainer.appendChild(localVideo);
+
+        socket.emit('join-room', roomId, userId, username);
+        roomIdDisplay.textContent = roomId;
+        roomIdCopy.value = roomId;
+        console.log(`Initialized with roomId: ${roomId}, userId: ${userId}, username: ${username}`);
+      } catch (err) {
+        console.error('Error accessing media:', err.name, err.message);
+        alert('Không thể truy cập camera hoặc micro. Vui lòng cho phép truy cập.');
+      }
+    }
+
+    function updateMainVideo(videoElement, userId) {
+      const existingMain = videoContainer.querySelector('.main-video');
+      if (existingMain && existingMain.getAttribute('data-user-id') !== userId) {
+        existingMain.classList.remove('main-video');
+        existingMain.classList.add('small-video');
+      }
+      if (!videoElement.classList.contains('main-video')) {
+        videoElement.classList.add('main-video');
+        videoElement.classList.remove('small-video');
+      }
+      mainVideoUserId = userId;
+      console.log(`Main video updated for user ${userId}`);
+    }
+
+    socket.on('user-joined', (data) => {
+      console.log(`User ${data.username} (${data.userId}) with socketId ${data.socketId} joined room ${roomId}`);
+      if (!peers[data.userId]) { // Tránh tạo duplicate peer
+        connectToNewUser(data.userId, data.socketId);
+      }
+    });
+
+    function connectToNewUser(userId, toSocketId) {
+      createPeerConnection(userId, toSocketId, localStream || screenStream).then(peer => {
+        peers[userId] = { peer, toSocketId };
+        if (userId !== this.userId) { // Không tạo offer cho chính mình
+          peer.createOffer().then(offer => {
+            console.log(`Created offer for ${userId}:`, offer.sdp.substring(0, 50) + '...');
+            return peer.setLocalDescription(offer);
+          }).then(() => {
+            console.log(`Set local description for ${userId}`);
+            socket.emit('offer', { roomId, offer: peer.localDescription, toSocketId });
+          }).catch(err => console.error(`Offer error for ${userId}:`, err));
+        }
+      });
+    }
+
+    socket.on('offer', ({ from, offer }) => {
+      console.log(`Received offer from ${from}:`, offer.sdp.substring(0, 50) + '...');
+      if (!peers[from]) {
+        createPeerConnection(from, from, localStream || screenStream).then(peer => {
+          peers[from] = { peer, toSocketId: from };
+          peer.setRemoteDescription(new RTCSessionDescription(offer))
+            .then(() => {
+              console.log(`Set remote description for offer from ${from}`);
+              return peer.createAnswer();
+            })
+            .then(answer => {
+              console.log(`Created answer for ${from}:`, answer.sdp.substring(0, 50) + '...');
+              return peer.setLocalDescription(answer);
+            })
+            .then(() => {
+              console.log(`Set local description for answer to ${from}`);
+              socket.emit('answer', { roomId, answer: peer.localDescription, toSocketId: from });
+            }).catch(err => console.error(`Answer error for ${from}:`, err));
+        });
+      }
+    });
+
+    socket.on('answer', ({ from, answer }) => {
+      console.log(`Received answer from ${from}:`, answer.sdp.substring(0, 50) + '...');
+      if (peers[from]) {
+        peers[from].peer.setRemoteDescription(new RTCSessionDescription(answer))
+          .catch(err => console.error(`Set remote description error for ${from}:`, err));
+      }
+    });
+
+    socket.on('candidate', ({ from, candidate }) => {
+      console.log(`Received candidate from ${from}:`, candidate.candidate.substring(0, 50) + '...');
+      if (peers[from]) {
+        peers[from].peer.addIceCandidate(new RTCIceCandidate(candidate))
+          .catch(err => console.error(`Add ICE candidate error for ${from}:`, err));
+      }
+    });
+
+    async function shareScreen() {
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const screenVideo = document.createElement('video');
+        screenVideo.srcObject = screenStream;
+        screenVideo.autoplay = true;
+        screenVideo.playsInline = true;
+        screenVideo.addEventListener('loadedmetadata', () => {
+          screenVideo.play().catch(e => console.error('Screen play error:', e));
+          console.log('Screen share started by local user, playing: ', screenVideo.played.length > 0);
+          updateMainVideo(screenVideo, userId); // Hiển thị màn hình chính
+        });
+        screenVideo.style.width = '300px';
+        screenVideo.style.height = '200px';
+        screenVideo.setAttribute('data-user-id', userId);
+        videoContainer.appendChild(screenVideo);
+
+        // Cập nhật stream cho tất cả peer
+        Object.keys(peers).forEach(peerId => {
+          const peer = peers[peerId].peer;
+          peer.getSenders().forEach(sender => {
+            if (sender.track && sender.track.kind === 'video') {
+              peer.removeTrack(sender);
+            }
+          });
+          screenStream.getTracks().forEach(track => peer.addTrack(track, screenStream));
+          console.log(`Updated screen track for peer ${peerId}`);
+        });
+
+        const screenPeer = new RTCPeerConnection({
+          iceServers: await getIceServers()
+        });
+        screenStream.getTracks().forEach(track => screenPeer.addTrack(track, screenStream));
+
+        screenPeer.onicecandidate = (event) => {
+          if (event.candidate) {
+            Object.keys(peers).forEach(peerId => {
+              socket.emit('screen-candidate', { roomId, screenCandidate: event.candidate, toSocketId: peers[peerId].toSocketId });
+            });
+          }
+        };
+
+        screenPeer.createOffer().then(offer => screenPeer.setLocalDescription(offer))
+          .then(() => {
+            Object.keys(peers).forEach(peerId => {
+              socket.emit('share-screen', { roomId, screenOffer: screenPeer.localDescription, toSocketId: peers[peerId].toSocketId });
+            });
+          }).catch(err => console.error('Screen offer error:', err));
+
+        screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+      } catch (err) {
+        console.error('Error sharing screen:', err);
+        alert('Không thể chia sẻ màn hình. Vui lòng cho phép truy cập.');
+      }
+    }
+
+    socket.on('screen-offer', ({ from, screenOffer }) => {
+      console.log(`Received screen offer from ${from}`);
+      createPeerConnection(from, from, screenStream || localStream).then(screenPeer => {
+        peers[from] = { peer: screenPeer, toSocketId: from };
+
+        screenPeer.ontrack = (event) => {
+          console.log(`Received screen track from ${from}, stream count: ${event.streams.length}`);
+          if (event.streams.length > 0) {
+            let screenVideo = videoContainer.querySelector(`video[data-user-id="${from}"]`);
+            if (!screenVideo) {
+              screenVideo = document.createElement('video');
+              screenVideo.setAttribute('data-user-id', from);
+              screenVideo.autoplay = true;
+              screenVideo.playsInline = true;
+              screenVideo.style.width = from === this.userId ? '300px' : '200px';
+              screenVideo.style.height = from === this.userId ? '200px' : '150px';
+              videoContainer.appendChild(screenVideo);
+              console.log(`Added new screen video element for user ${from}`);
+            }
+            screenVideo.srcObject = event.streams[0];
+            screenVideo.onloadedmetadata = () => {
+              screenVideo.play().catch(e => console.error('Screen play error:', e));
+              console.log(`Remote screen share started for user ${from}, playing: ${screenVideo.played.length > 0}`);
+              if (from !== this.userId) updateMainVideo(screenVideo, from); // Hiển thị màn hình chính
+            };
+          }
+        };
+
+        screenPeer.oniceconnectionstatechange = () => {
+          console.log(`Screen ICE connection state for peer ${from}: ${screenPeer.iceConnectionState}`);
+          if (screenPeer.iceConnectionState === 'disconnected' || screenPeer.iceConnectionState === 'failed') {
+            console.error(`Screen ICE connection lost for peer ${from}, attempting reconnect...`);
+            setTimeout(() => {
+              if (peers[from]) {
+                peers[from].peer.close();
+                delete peers[from];
+                createPeerConnection(from, from, screenStream || localStream).then(newPeer => {
+                  peers[from] = { peer: newPeer, toSocketId: from };
+                  newPeer.setRemoteDescription(new RTCSessionDescription(screenOffer))
+                    .then(() => newPeer.createAnswer())
+                    .then(answer => newPeer.setLocalDescription(answer))
+                    .then(() => socket.emit('screen-answer', { roomId, screenAnswer: newPeer.localDescription, toSocketId: from }))
+                    .catch(err => console.error('Reconnect screen error:', err));
+                });
+              }
+            }, 2000);
+          }
+        };
+
+        screenPeer.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log(`Sending screen candidate to ${from}`);
+            socket.emit('screen-candidate', { roomId, screenCandidate: event.candidate, toSocketId: from });
+          }
+        };
+
+        screenPeer.setRemoteDescription(new RTCSessionDescription(screenOffer))
+          .then(() => screenPeer.createAnswer())
+          .then(answer => screenPeer.setLocalDescription(answer))
+          .then(() => {
+            console.log(`Sent screen answer to ${from}`);
+            socket.emit('screen-answer', { roomId, screenAnswer: screenPeer.localDescription, toSocketId: from });
+          }).catch(err => console.error('Screen answer error:', err));
+      });
+    });
+
+    socket.on('screen-answer', ({ from, screenAnswer }) => {
+      console.log(`Received screen answer from ${from}`);
+      if (peers[from]) {
+        peers[from].peer.setRemoteDescription(new RTCSessionDescription(screenAnswer))
+          .catch(err => console.error('Screen set remote error:', err));
+      }
+    });
+
+    socket.on('screen-candidate', ({ from, screenCandidate }) => {
+      console.log(`Received screen candidate from ${from}`);
+      if (peers[from]) {
+        peers[from].peer.addIceCandidate(new RTCIceCandidate(screenCandidate))
+          .catch(err => console.error('Screen ICE candidate error:', err));
+      }
+    });
+
+    function stopScreenShare() {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+        videoContainer.querySelectorAll('video[data-user-id="' + userId + '"]').forEach(video => {
+          if (video.srcObject === screenStream) video.remove();
+        });
+        Object.keys(peers).forEach(peerId => {
+          const peer = peers[peerId].peer;
+          peer.getSenders().forEach(sender => {
+            if (sender.track && sender.track.kind === 'video' && sender.track !== localStream.getVideoTracks()[0]) {
+              peer.removeTrack(sender);
+            }
+          });
+          localStream.getVideoTracks().forEach(track => peer.addTrack(track, localStream));
+          console.log(`Reverted to local video stream for peer ${peerId}`);
+        });
+      }
+    }
+
+    const muteUnmute = () => {
+      if (!localStream) return;
+      const enabled = localStream.getAudioTracks()[0].enabled;
+      if (enabled) {
+        localStream.getAudioTracks()[0].enabled = false;
+        setUnmuteButton();
+      } else {
+        setMuteButton();
+        localStream.getAudioTracks()[0].enabled = true;
+      }
+    };
+
+    const playStop = () => {
+      if (!localStream) return;
+      const enabled = localStream.getVideoTracks()[0].enabled;
+      if (enabled) {
+        localStream.getVideoTracks()[0].enabled = false;
+        setPlayVideo();
+      } else {
+        setStopVideo();
+        localStream.getVideoTracks()[0].enabled = true;
+      }
+    };
+
+    const setMuteButton = () => {
+      document.querySelector('.main_mute_button').innerHTML = '<i class="fas fa-microphone"></i><span>Mute</span>';
+    };
+
+    const setUnmuteButton = () => {
+      document.querySelector('.main_mute_button').innerHTML = '<i class="fas fa-microphone-slash"></i><span>Unmute</span>';
+    };
+
+    const setStopVideo = () => {
+      document.querySelector('.main_video_button').innerHTML = '<i class="fas fa-video"></i><span>Stop Video</span>';
+    };
+
+    const setPlayVideo = () => {
+      document.querySelector('.main_video_button').innerHTML = '<i class="fas fa-video-slash"></i><span>Play Video</span>';
+    };
+
+    sendBtn.addEventListener('click', () => {
+      const message = chatInput.value.trim();
+      if (message) {
+        socket.emit('message', { message, username, roomId, userId });
+        chatInput.value = '';
+      }
+    });
+
+    socket.on('message', (data) => {
+      const msgElement = document.createElement('div');
+      msgElement.textContent = `${data.username} (${data.userId || 'unknown'}): ${data.message}`;
+      chatMessages.appendChild(msgElement);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+
+    socket.on('user-disconnected', ({ userId, socketId }) => {
+      console.log(`User ${userId} with socketId ${socketId} disconnected from room ${roomId}`);
+      if (peers[userId]) {
+        peers[userId].peer.close();
+        delete peers[userId];
+        videoContainer.querySelectorAll(`video[data-user-id="${userId}"]`).forEach(video => video.remove());
+      }
+    });
+
+    leaveBtn.addEventListener('click', () => {
+      socket.emit('leave-room', roomId, userId);
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+      Object.values(peers).forEach(peer => peer.peer.close());
+      peers = {};
+      window.location.href = '/home';
+    });
+
+    backBtn.addEventListener('click', () => window.location.href = '/home');
+
+    function copyRoomId() {
+      roomIdCopy.select();
+      document.execCommand('copy');
+      alert('Mã phòng đã được sao chép!');
+    }
+
+    init();
+  </script>
 </body>
 </html>
